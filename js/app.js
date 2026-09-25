@@ -40,7 +40,7 @@
     if (parts[0] !== 'class') return { tab: parts[0] === 'backup' ? 'backup' : 'home' };
     const cls = state.data?.classes.find(c => c.id === parts[1]);
     if (!cls) return { tab: 'home' };
-    const tab = ['entry', 'summary', 'manage'].includes(parts[2]) ? parts[2] : 'entry';
+    const tab = ['entry', 'summary', 'manage', 'results'].includes(parts[2]) ? parts[2] : 'entry';
     const control = cls.controls.find(c => c.id === parts[3]);
     const student = cls.students.find(s => s.id === parts[4]) || V.sortedStudents(cls)[0];
     return { cls, tab, control, student };
@@ -56,6 +56,7 @@
       let content;
       if (r.tab === 'summary') content = V.summary(r.cls, state.query, state.sort);
       else if (r.tab === 'manage') content = V.manage(r.cls);
+      else if (r.tab === 'results' && r.control) content = V.results(r.cls, r.control);
       else content = r.control && r.student ? V.entry(r.cls, r.control, r.student) : V.chooseControl(r.cls);
       main.innerHTML = V.shell(r.cls, r.tab, content);
     }
@@ -81,7 +82,8 @@
   }
   function editClass(data, clsId) { return data.classes.find(c => c.id === clsId); }
   function controlDialog(cls, control) {
-    openForm(control ? 'Modifier le contrôle' : 'Nouveau contrôle', V.controlFields(cls, control), control ? 'Enregistrer' : 'Créer et saisir →', form => {
+    if (!control || control.mode === 'graded') return gradedControlDialog(cls, control);
+    openForm('Modifier le contrôle ancien format', V.controlFields(cls, control), 'Enregistrer', form => {
       const name = form.elements.name.value.trim(), date = form.elements.date.value;
       if (!name || !M.validDate(date)) throw new Error('Vérifiez le nom et la date du contrôle.');
       const skills = [...form.querySelectorAll('input[name=skill]:checked')].map(input => {
@@ -91,20 +93,85 @@
       });
       if (!skills.length) throw new Error('Choisissez au moins une compétence.');
       const apply = () => {
-        const controlId = control?.id || M.uid();
+        const controlId = control.id;
         const ok = mutate(data => {
           const target = editClass(data, cls.id), existing = target.controls.find(c => c.id === controlId);
-          if (existing) {
-            existing.name = name; existing.date = date; existing.skills = skills;
-            for (const results of Object.values(existing.results)) for (const skillId of Object.keys(results)) if (!skills.some(s => s.skillId === skillId)) delete results[skillId];
-          } else target.controls.push({ id: controlId, name, date, skills, results: {} });
-        }, { undoLabel: control ? 'Contrôle modifié.' : '' });
-        if (ok) { dialog.close(); navigate(V.path(cls, 'entry', controlId)); notify(control ? 'Contrôle mis à jour.' : 'Contrôle créé. Prenez votre première copie.'); }
+          if (!existing) throw new Error('Ce contrôle n’existe plus.');
+          existing.name = name; existing.date = date; existing.skills = skills;
+          for (const results of Object.values(existing.results)) for (const skillId of Object.keys(results)) if (!skills.some(s => s.skillId === skillId)) delete results[skillId];
+        }, { undoLabel: 'Contrôle modifié.' });
+        if (ok) { dialog.close(); navigate(V.path(cls, 'entry', controlId)); notify('Contrôle mis à jour.'); }
       };
       const changed = control && JSON.stringify(control.skills) !== JSON.stringify(skills);
       if (changed && Object.keys(control.results).length) ask('Modifier les compétences du contrôle ?', '<p>Les moyennes seront recalculées avec les nouveaux barèmes. Les saisies des compétences retirées seront supprimées.</p><p>Vous pourrez annuler cette action avant la prochaine modification.</p>', 'Appliquer les changements', apply, true);
       else apply();
     });
+  }
+  function readGradedForm(form) {
+    const items = [...form.querySelectorAll('input[name=skill]:checked')].map(input => ({
+      id: input.dataset.itemId, type: 'skill', skillId: input.value, maxPoints: M.parsePoints(form.elements['max-' + input.value].value).value
+    }));
+    for (const row of form.querySelectorAll('[data-question]')) items.push({ id: row.dataset.question, type: 'courseQuestion', label: row.querySelector('[data-question-label]').value.trim(), maxPoints: M.parsePoints(row.querySelector('[data-question-max]').value).value });
+    return { name: form.elements.name.value.trim(), date: form.elements.date.value, maxGrade: Number(form.elements.maxGrade.value), bonusEnabled: form.elements.bonusEnabled.checked, items };
+  }
+  function updateRubric() {
+    const el = dialog.querySelector('#rubric-status'); if (!el) return;
+    const form = dialog.querySelector('form'), spec = readGradedForm(form), status = M.rubricStatus(spec.maxGrade, spec.items);
+    const remaining = status.remaining;
+    el.textContent = `${V.fmt(status.sum)} / ${spec.maxGrade} points répartis` + (remaining > 0 ? ` — reste ${V.fmt(remaining)} points` : remaining < 0 ? ` — retirer ${V.fmt(-remaining)} points` : status.valid ? ' ✓' : ' — vérifiez chaque barème');
+    el.className = 'rubric-status ' + (status.valid ? 'complete' : 'partial');
+    form.querySelector('[type=submit]').disabled = !status.valid;
+  }
+  function gradedControlDialog(cls, control) {
+    const locked = control && M.gradingLocked(control);
+    openForm(control ? 'Modifier le devoir' : 'Nouveau devoir', V.gradedControlFields(cls, control), control ? 'Enregistrer' : 'Créer et corriger →', form => {
+      const spec = readGradedForm(form);
+      if (locked) { spec.items = M.clone(control.items); spec.maxGrade = control.maxGrade; spec.bonusEnabled = control.bonusEnabled; }
+      if (!spec.name || !M.validDate(spec.date)) throw new Error('Vérifiez le nom et la date du devoir.');
+      if (!M.rubricStatus(spec.maxGrade, spec.items).valid) throw new Error('Le barème doit correspondre exactement à la note maximale.');
+      if (spec.items.some(i => i.type === 'courseQuestion' && !i.label)) throw new Error('Donnez un libellé à chaque question de cours.');
+      const id = control?.id || M.uid();
+      const ok = mutate(data => {
+        const target = editClass(data, cls.id), existing = target.controls.find(c => c.id === id);
+        if (existing) M.updateGraded(existing, spec);
+        else target.controls.push({ id, mode: 'graded', ...spec, results: {} });
+      }, { undoLabel: control ? 'Devoir modifié.' : '' });
+      if (ok) { dialog.close(); navigate(V.path(cls, 'entry', id)); notify(control ? 'Devoir mis à jour.' : 'Devoir créé. Prenez votre première copie.'); }
+    });
+    updateRubric();
+  }
+  function refreshGradedEntry() {
+    const r = route();
+    for (const item of r.control.items) {
+      const answer = r.control.results[r.student.id]?.answers[item.id], status = M.answerStatus(item, answer);
+      const fields = item.type === 'skill' ? M.LEVELS.map(level => ({ input: document.getElementById('answer-' + item.id + '-' + level), raw: answer?.[level] ?? '' })) : [{ input: document.getElementById('answer-' + item.id), raw: answer?.raw ?? '' }];
+      for (const { input, raw } of fields) {
+        if (input.value !== raw) input.value = raw;
+        input.setAttribute('aria-invalid', String(item.type === 'skill' ? M.parsePoints(raw).kind === 'invalid' : status.state === 'invalid'));
+      }
+      const feedback = document.getElementById('answer-status-' + item.id);
+      feedback.textContent = V.answerText(item, status); feedback.className = 'entry-status ' + status.state;
+    }
+    if (r.control.bonusEnabled) {
+      const input = document.getElementById('bonus-points'), raw = r.control.results[r.student.id]?.bonusRaw || '', invalid = M.parsePoints(raw).kind === 'invalid';
+      if (input.value !== raw) input.value = raw;
+      input.setAttribute('aria-invalid', String(invalid));
+      document.getElementById('bonus-status').textContent = invalid ? 'Indiquez un nombre positif ou zéro (2 décimales maximum).' : `Vide = 0. La note peut dépasser ${r.control.maxGrade}.`;
+    }
+    const status = M.gradeStatus(r.control, r.student.id), total = document.getElementById('grade-total');
+    total.textContent = V.gradeText(r.control, status); total.className = 'grade-total ' + status.state;
+    document.getElementById('student-progress').textContent = `${status.complete} / ${status.total} éléments renseignés`;
+  }
+  function saveGradedAnswer(itemId, raw, bonus = false, level = null, clear = false) {
+    const r = route();
+    mutate(data => {
+      const control = editClass(data, r.cls.id).controls.find(c => c.id === r.control.id);
+      if (clear) M.clearAnswer(control, r.student.id, itemId);
+      else if (bonus) M.setBonus(control, r.student.id, raw);
+      else if (level) M.setDistribution(control, r.student.id, itemId, level, raw);
+      else M.setAnswer(control, r.student.id, itemId, raw);
+    }, { render: false });
+    refreshGradedEntry();
   }
   function download(content, name, type = 'application/json') {
     const url = URL.createObjectURL(new Blob([content], { type })), link = document.createElement('a');
@@ -131,6 +198,13 @@
     });
   }
   const actions = {
+    'add-question': () => {
+      const list = dialog.querySelector('#course-questions');
+      list.insertAdjacentHTML('beforeend', V.questionField());
+      list.lastElementChild.querySelector('input').focus(); updateRubric();
+    },
+    'remove-question': (r, btn) => { btn.closest('[data-question]').remove(); updateRubric(); },
+    'clear-answer': (r, btn) => saveGradedAnswer(btn.dataset.item, '', false, null, true),
     backup: () => navigate('#backup'),
     'close-dialog': () => dialog.close(),
     'new-class': () => nameForm('Ajouter une classe', '', name => {
@@ -172,6 +246,7 @@
     export: exportData,
     'raw-export': () => download(JSON.stringify(store.rawCopies(), null, 2), 'carnet-a-recuperer.json'),
     previous: () => { try { const data = store.previous(); if (!data) notify('Il n’y a pas encore de copie précédente sur cet appareil.'); else previewRestore(data); } catch (error) { notify(error.message); } },
+    original: () => { try { const data = store.original(); if (!data) notify('Aucun carnet antérieur à la mise à jour n’a été trouvé sur cet appareil.'); else previewRestore(data); } catch (error) { notify(error.message); } },
     retry: () => { if (persist()) notify('Toutes vos modifications sont enregistrées.'); },
     reload: () => ask('Rouvrir le carnet enregistré ?', '<p>Les modifications non enregistrées de cette fenêtre seront abandonnées. Téléchargez votre copie si vous souhaitez les conserver.</p>' + V.button('Télécharger ma copie', 'export', 'button secondary'), 'Rouvrir', () => location.reload()),
     print: () => window.print()
@@ -180,7 +255,7 @@
     const btn = event.target.closest('[data-action]'); if (!btn) return;
     const action = btn.dataset.action;
     if (!actions[action]) return;
-    if ((state.recovery || state.conflict) && !['backup', 'export', 'raw-export', 'previous', 'reload', 'close-dialog', 'retry'].includes(action)) { notify('Retrouvez votre carnet avant de le modifier.'); return; }
+    if ((state.recovery || state.conflict) && !['backup', 'export', 'raw-export', 'previous', 'original', 'reload', 'close-dialog', 'retry'].includes(action)) { notify('Retrouvez votre carnet avant de le modifier.'); return; }
     actions[action](route(), btn);
   });
   dialog.addEventListener('submit', event => {
@@ -194,10 +269,14 @@
       field.parentElement.hidden = !event.target.checked;
       if (event.target.checked) field.focus();
     }
+    updateRubric();
   });
+  dialog.addEventListener('input', updateRubric);
   main.addEventListener('input', event => {
     const input = event.target, r = route();
     if (input.id === 'summary-search') { state.query = input.value; document.getElementById('summary-results').innerHTML = V.summaryCards(r.cls, state.query, state.sort); return; }
+    if (input.hasAttribute('data-distribution')) { saveGradedAnswer(input.dataset.distribution, input.value, false, input.dataset.level); return; }
+    if (input.hasAttribute('data-answer') || input.hasAttribute('data-bonus')) { saveGradedAnswer(input.dataset.answer, input.value, input.hasAttribute('data-bonus')); return; }
     if (!input.hasAttribute('data-point')) return;
     if (state.conflict) { input.value = r.control.results[r.student.id]?.[input.dataset.skill]?.[input.dataset.level] || ''; notify('Rouvrez le carnet enregistré avant de poursuivre la saisie.'); return; }
     const skillId = input.dataset.skill, level = input.dataset.level, raw = input.value;
@@ -231,11 +310,11 @@
       state.conflict = true; state.error = new S.StorageError('Le carnet a changé dans une autre fenêtre. Rouvrez sa version enregistrée avant de continuer. Vous pouvez d’abord télécharger votre copie.', 'conflict'); updateNotice();
     }
   }
-  window.addEventListener('storage', event => { if (event.key === S.KEY || event.key === null) checkExternal(); });
+  window.addEventListener('storage', event => { if ([S.KEY, S.V2, S.V1, ...S.LEGACY, null].includes(event.key)) checkExternal(); });
   window.addEventListener('focus', checkExternal);
   try {
     const loaded = store.load(); state.data = loaded.data;
-    if (loaded.migrated) { persist(); notify('Votre ancien carnet a été récupéré dans « Ma classe ». L’original est conservé.'); }
+    if (loaded.migrated && persist()) notify('Votre carnet a été récupéré. Les données d’origine sont conservées ; les éventuels pourcentages de test restent visibles dans les copies pour référence.');
   } catch (error) { state.recovery = true; state.error = error; }
   renderRoute(false);
 })();
