@@ -1,6 +1,6 @@
 # CompéNote — V2
 
-Carnet de compétences et de notes pour corriger une pile de copies sur téléphone, classe par classe.
+CompéNote accompagne une enseignante dans le suivi des notes et des compétences et la correction des copies, notamment sur téléphone. Le parcours général est : **classes → élèves → devoirs → compétences → bilans**.
 
 ## Ouvrir l’application
 
@@ -51,6 +51,8 @@ La sauvegarde sur l’appareil se fait à chaque modification. **Enregistré** d
 - Les acquisitions valides alimentent le bilan même si d’autres éléments de la copie sont incomplets. **Les questions de cours et les bonus n’alimentent jamais les compétences.**
 - Dès la première saisie, même ensuite effacée, le barème, les éléments et l’activation des bonus sont verrouillés tant que le devoir conserve des corrections. Le nom et la date restent modifiables.
 
+La note finale est la somme des **points pondérés des compétences + points des questions de cours + bonus**.
+
 Exemple : compétence A /5 avec NA 1, ECA 1, PA 2, TA 1 = **3 points, 60 %** ; compétence B /8 avec NA 0, ECA 2, PA 4, TA 2 = **6 points, 75 %** ; cours = 5 / 7 ; bonus = 1. **Note : 15 / 20.**
 
 ## Anciens contrôles et bilans
@@ -78,7 +80,7 @@ Les seuils de couleur restent <25, <50, <75, puis ≥75 %. Les couleurs du bilan
 - `js/views.js` : vues échappées sans mutation du carnet.
 - `js/app.js` : navigation, commandes et mise à jour ciblée de la correction, sans reconstruction des champs à chaque frappe.
 
-La V2 corrigée utilise le **schéma de stockage 3**, distinct du schéma 2 expérimental à pourcentages. Le document conserve `version`, `revision`, `updatedAt`, `classes`. Chaque classe conserve ses élèves, compétences et contrôles à identifiants stables.
+La V2 utilise le **schéma de stockage 3**, distinct du schéma 2 expérimental à pourcentages. Le document conserve `version`, `revision`, `updatedAt`, `classes`. Chaque classe conserve ses élèves, compétences et contrôles à identifiants stables.
 
 Un devoir `graded` contient `id`, `mode`, `name`, `date`, `maxGrade`, `items`, `bonusEnabled`, `results`. Chaque élément possède `id`, `type`, `maxPoints` et soit `skillId` (`skill`), soit `label` (`courseQuestion`). Une compétence ne figure qu’une fois dans un devoir.
 
@@ -90,9 +92,9 @@ Un contrôle historique conserve exactement ses `skills` et `results`, avec le s
 
 Avant la première ouverture de la V2, télécharger une sauvegarde depuis l’application précédente si possible.
 
-- Clé courante : `mon_carnet_v3` ; copie précédant la dernière écriture : `mon_carnet_v3_previous`. Le nom V2 reste celui de la fonctionnalité métier ; 3 désigne le schéma de stockage corrigé.
+- Clé courante : `mon_carnet_v3` ; copie précédant la dernière écriture : `mon_carnet_v3_previous`. Le nom V2 reste celui de la fonctionnalité métier ; 3 désigne le schéma de stockage actuel.
 - Sans schéma 3 existant, lecture prioritaire de `mon_carnet_v2` (expérimental), puis de `mon_carnet_v1`, puis du prototype. Validation du format source, migration en mémoire, validation du schéma 3, puis écriture dans la **nouvelle clé**. La valeur écrite est relue et comparée avant d’annoncer la réussite.
-- `mon_carnet_v2`, `mon_carnet_v2_previous`, `mon_carnet_v1` et `mon_carnet_v1_previous` ne sont jamais écrasées ou supprimées par l’application corrigée. Classes, identifiants, résultats et brouillons V1 sont conservés ; seule la version du document et le mode des contrôles changent.
+- `mon_carnet_v2`, `mon_carnet_v2_previous`, `mon_carnet_v1` et `mon_carnet_v1_previous` ne sont jamais écrasées ou supprimées par l’application. Classes, identifiants, résultats et brouillons V1 sont conservés ; seule la version du document et le mode des contrôles changent.
 - **Examiner le carnet d’origine** permet aussi de restaurer explicitement la source expérimentale, V1 ou prototype, même si la première copie au nouveau format est devenue illisible. Cette source ne contient pas les corrections ultérieures.
 - Un carnet au schéma 3 présent est prioritaire. Une corruption ouvre la récupération, jamais un carnet vide ou un retour silencieux à V1.
 - **Copie précédente** propose la copie au schéma 3 ; à défaut, la copie précédente expérimentale puis V1 peut être examinée et restaurée après migration. Une copie présente mais corrompue n’est jamais masquée par une copie plus ancienne.
@@ -114,11 +116,11 @@ Un message dans la liste des devoirs signale les copies à reprendre. Dans chaqu
 
 Ces références restent conservées après ressaisie, dans les sauvegardes et à la restauration. Les validateurs distinguent les formats : une réponse `{ raw: "50" }` ne peut pas être interprétée comme une répartition dans le schéma 3.
 
-## Prototype original
+## Compatibilité avec le prototype
 
-`carnet_competences_math_v7_navigation_competences.html` reste intact. Si aucun carnet aux schémas 3, 2 ou 1 n’existe et que les clés `carnet_competences_math_v5` ou `gestion_competences_points_v4` sont accessibles, elles sont migrées dans **Ma classe**, avec les règles de reprise du prototype déjà utilisées en V1. Ces clés ne sont jamais effacées.
+Sans carnet aux schémas 3, 2 ou 1, les clés `carnet_competences_math_v5` et `gestion_competences_points_v4` sont reprises dans **Ma classe**. Les résultats sont conservés et les identifiants du prototype sont remappés ; ceux des schémas 1 et 2 restent inchangés. Les clés sources ne sont jamais effacées.
 
-En ouverture directe `file:`, le navigateur peut isoler le stockage par fichier. Ne pas déplacer, renommer ou supprimer le prototype avant d’avoir récupéré ses données. `tools/export-prototype.js`, exécuté dans sa console par la personne accompagnant le test, télécharge une sauvegarde que la V2 sait importer. Il ne modifie pas les données du prototype.
+En ouverture directe `file:`, le navigateur peut isoler le stockage par fichier. Conserver le prototype et exporter ses données avant de changer de fichier ou d’adresse. Les fichiers du prototype et les outils de démonstration locaux non suivis par Git ne font pas partie de la version distribuée.
 
 ## Vérifications
 
@@ -128,13 +130,14 @@ Aucune dépendance npm à installer :
 node tests/model.test.js
 node tests/grading.test.js
 node tests/browser.test.cjs
+git diff --check
 ```
 
 Les tests métier couvrent les formules historiques et V2, les trois maxima, les quatre cas de répartition demandés, les états vides/partiels/excessifs/invalides, les bonus, les décimales, le verrouillage, les bilans mixtes, la migration sans perte et les protections de stockage.
 
 Le test navigateur utilise Chrome à `/usr/bin/google-chrome`, ou `CHROME_BIN`. Il lance un profil temporaire isolé sans toucher au profil personnel. Les captures sont écrites dans le dossier temporaire du système. Chrome est lancé sans bac à sable pour cet environnement de test isolé ; ne pas utiliser ce mode pour la navigation courante.
 
-Les parcours vérifient création et correction V2, résultats et reprise d’une copie, ancien format, migration V1, prototype et pourcentages expérimentaux, import/export, quota, conflits, rechargement, focus et largeurs 360/390/430/1 280 px. Le scénario de charge utilise 35 élèves × 50 contrôles historiques et un carnet V2 multi-classes.
+Les parcours vérifient création et correction V2, résultats et reprise d’une copie, ancien format, migration V1, prototype et pourcentages expérimentaux, import/export, quota, conflits, rechargement, focus et largeurs 360/390/430/1 280 px. Ils vérifient aussi les cibles tactiles à hauteur réduite (approximation du clavier ouvert), les identifiants HTML de la correction, les erreurs console et la génération PDF des résultats. Le scénario de charge utilise 35 élèves × 50 contrôles historiques et un carnet V2 multi-classes.
 
 ## Limites et vérifications manuelles
 

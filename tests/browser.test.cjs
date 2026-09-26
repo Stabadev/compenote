@@ -20,6 +20,7 @@ child.stdio[4].on('data', chunk => {
     const message = JSON.parse(raw);
     if (message.id) { const p = pending.get(message.id); if (p) { pending.delete(message.id); clearTimeout(p.timer); message.error ? p.reject(new Error(JSON.stringify(message.error))) : p.resolve(message.result); } }
     else if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text);
+    else if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error') errors.push(message.params.args.map(arg => arg.value || arg.description).join(' '));
   }
 });
 function send(method, params = {}, sessionId) {
@@ -111,6 +112,18 @@ async function main() {
   await p.screenshot('carnet-v2-correction');
   const unnamedGraded = await p.evaluate(`Array.from(document.querySelectorAll('input,select,textarea')).filter(el=>!el.getAttribute('aria-label') && !el.labels?.length).map(el=>el.id)`);
   assert.deepEqual(unnamedGraded,[],'champs V2 nommés');
+  // Hauteur réduite : approximation du clavier ouvert, avec champs et navigation accessibles.
+  for (const width of [360,390,430]) {
+    await send('Emulation.setDeviceMetricsOverride',{width,height:360,deviceScaleFactor:1,mobile:true},p.sessionId);
+    for (const selector of ['.graded-item:first-child [data-level=TA]', '#bonus-points', '.student-pager .primary']) {
+      const visible = await p.evaluate(`{const el=document.querySelector(${JSON.stringify(selector)});el.focus({preventScroll:true});el.scrollIntoView({block:'center',behavior:'instant'});const r=el.getBoundingClientRect();const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);({width:r.width,height:r.height,reachable:!!hit && (hit===el || el.contains(hit))})}`);
+      assert.ok(visible.width >= 44 && visible.height >= 44, 'cible tactile '+selector+' à '+width);
+      assert.ok(visible.reachable, 'champ ou bouton masqué à '+width+': '+selector);
+    }
+    assert.equal(await p.evaluate('document.documentElement.scrollWidth<=innerWidth'),true,'hauteur réduite '+width);
+  }
+  assert.deepEqual(await p.evaluate(`{const ids=Array.from(document.querySelectorAll('[id]'),el=>el.id);ids.filter((id,index)=>ids.indexOf(id)!==index)}`),[], 'identifiants HTML uniques');
+  await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true},p.sessionId);
   await p.fill('.graded-item:first-child [data-level=TA]', '2,');
   await p.evaluate('window.__reloading=true;location.reload()'); await p.wait('!window.__reloading && !!document.querySelector("[data-distribution]")');
   assert.equal(await p.evaluate('document.querySelector(".graded-item:first-child [data-level=TA]").value'),'2,');
@@ -131,6 +144,12 @@ async function main() {
   }
   await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true},p.sessionId);
   await p.screenshot('carnet-v2-resultats');
+  await send('Emulation.setEmulatedMedia',{media:'print'},p.sessionId);
+  assert.equal(await p.evaluate('getComputedStyle(document.querySelector(".class-tabs")).display'),'none');
+  assert.equal(await p.evaluate('Array.from(document.querySelectorAll(".result-open"),el=>getComputedStyle(el).display).every(v=>v==="none")'),true);
+  const printed = await send('Page.printToPDF',{printBackground:true},p.sessionId);
+  assert.ok(Buffer.from(printed.data,'base64').subarray(0,5).equals(Buffer.from('%PDF-')), 'impression PDF des notes');
+  await send('Emulation.setEmulatedMedia',{media:''},p.sessionId);
   await p.click('.grade-results a'); await p.wait('!!document.querySelector("[data-distribution]")');
   assert.equal(await p.evaluate('document.querySelector("#grade-total").textContent'),'Note : 15 / 20');
   await p.click('.class-tabs a:first-child'); await p.wait('!!document.querySelector("[data-action=edit-control]")');
