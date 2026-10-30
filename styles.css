@@ -1490,7 +1490,7 @@ dialog .helper {
 }
 
 
-/* V2 : barème, acquisition directe et note, dans les composants existants. */
+/* Barème et correction par items. */
 .control-actions {
   display:flex;
   flex-wrap:wrap;
@@ -1545,3 +1545,7 @@ dialog .helper {
   .grade-results li { break-inside:avoid; }
   .correction-footer { position:static; }
 }
+
+.experimental-banner { max-width:1100px; margin:12px auto; padding:0 20px; font-size:13px; color:#52615b; }
+.experimental-banner p { margin:4px 0; }
+@media print { .experimental-banner { display:none; } }
