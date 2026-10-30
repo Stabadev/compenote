@@ -81,32 +81,6 @@
     });
   }
   function editClass(data, clsId) { return data.classes.find(c => c.id === clsId); }
-  function controlDialog(cls, control) {
-    if (!control || control.mode === 'graded') return gradedControlDialog(cls, control);
-    openForm('Modifier le contrôle ancien format', V.controlFields(cls, control), 'Enregistrer', form => {
-      const name = form.elements.name.value.trim(), date = form.elements.date.value;
-      if (!name || !M.validDate(date)) throw new Error('Vérifiez le nom et la date du contrôle.');
-      const skills = [...form.querySelectorAll('input[name=skill]:checked')].map(input => {
-        const parsed = M.parsePoints(form.elements['max-' + input.value].value);
-        if (parsed.kind !== 'valid' || parsed.value <= 0) throw new Error('Indiquez un nombre de points supérieur à zéro pour chaque compétence choisie (2 décimales maximum).');
-        return { skillId: input.value, max: parsed.value };
-      });
-      if (!skills.length) throw new Error('Choisissez au moins une compétence.');
-      const apply = () => {
-        const controlId = control.id;
-        const ok = mutate(data => {
-          const target = editClass(data, cls.id), existing = target.controls.find(c => c.id === controlId);
-          if (!existing) throw new Error('Ce contrôle n’existe plus.');
-          existing.name = name; existing.date = date; existing.skills = skills;
-          for (const results of Object.values(existing.results)) for (const skillId of Object.keys(results)) if (!skills.some(s => s.skillId === skillId)) delete results[skillId];
-        }, { undoLabel: 'Contrôle modifié.' });
-        if (ok) { dialog.close(); navigate(V.path(cls, 'entry', controlId)); notify('Contrôle mis à jour.'); }
-      };
-      const changed = control && JSON.stringify(control.skills) !== JSON.stringify(skills);
-      if (changed && Object.keys(control.results).length) ask('Modifier les compétences du contrôle ?', '<p>Les moyennes seront recalculées avec les nouveaux barèmes. Les saisies des compétences retirées seront supprimées.</p><p>Vous pourrez annuler cette action avant la prochaine modification.</p>', 'Appliquer les changements', apply, true);
-      else apply();
-    });
-  }
   function readGradedForm(form) {
     const items = [...form.querySelectorAll('input[name=skill]:checked')].map(input => ({
       id: input.dataset.itemId, type: 'skill', skillId: input.value, maxPoints: M.parsePoints(form.elements['max-' + input.value].value).value
@@ -134,7 +108,7 @@
       const ok = mutate(data => {
         const target = editClass(data, cls.id), existing = target.controls.find(c => c.id === id);
         if (existing) M.updateGraded(existing, spec);
-        else target.controls.push({ id, mode: 'graded', ...spec, results: {} });
+        else target.controls.push({ id, ...spec, results: {} });
       }, { undoLabel: control ? 'Devoir modifié.' : '' });
       if (ok) { dialog.close(); navigate(V.path(cls, 'entry', id)); notify(control ? 'Devoir mis à jour.' : 'Devoir créé. Prenez votre première copie.'); }
     });
@@ -147,7 +121,7 @@
       const fields = item.type === 'skill' ? M.LEVELS.map(level => ({ input: document.getElementById('answer-' + item.id + '-' + level), raw: answer?.[level] ?? '' })) : [{ input: document.getElementById('answer-' + item.id), raw: answer?.raw ?? '' }];
       for (const { input, raw } of fields) {
         if (input.value !== raw) input.value = raw;
-        input.setAttribute('aria-invalid', String(item.type === 'skill' ? M.parsePoints(raw).kind === 'invalid' : status.state === 'invalid'));
+        input.setAttribute('aria-invalid', String(item.type === 'skill' ? M.parseItems(raw).kind === 'invalid' : status.state === 'invalid'));
       }
       const feedback = document.getElementById('answer-status-' + item.id);
       feedback.textContent = V.answerText(item, status); feedback.className = 'entry-status ' + status.state;
@@ -179,7 +153,7 @@
   }
   function exportData() {
     if (!state.data) return;
-    download(JSON.stringify(state.data, null, 2), 'mon-carnet-' + new Date().toISOString().slice(0, 10) + '.json');
+    download(JSON.stringify(state.data, null, 2), 'compenote-items-experimental-' + new Date().toISOString().slice(0, 10) + '.json');
     notify('Sauvegarde préparée. Vérifiez le fichier dans vos téléchargements.');
   }
   function previewRestore(candidate) {
@@ -221,8 +195,8 @@
       const student = r.cls.students.find(s => s.id === btn.dataset.id);
       nameForm('Modifier le nom de l’élève', student.name, name => mutate(data => { editClass(data, r.cls.id).students.find(s => s.id === student.id).name = name; }));
     },
-    'new-control': r => controlDialog(r.cls),
-    'edit-control': (r, btn) => controlDialog(r.cls, r.cls.controls.find(c => c.id === btn.dataset.id)),
+    'new-control': r => gradedControlDialog(r.cls),
+    'edit-control': (r, btn) => gradedControlDialog(r.cls, r.cls.controls.find(c => c.id === btn.dataset.id)),
     'delete-class': r => ask(`Supprimer ${V.esc(r.cls.name)} ?`, `<p>${r.cls.students.length} élèves · ${r.cls.controls.length} contrôles</p><p>Toutes les saisies associées seront supprimées. Vous pourrez annuler avant la prochaine modification.</p>`, 'Supprimer la classe', () => {
       if (mutate(data => { data.classes = data.classes.filter(c => c.id !== r.cls.id); }, { undoLabel: 'Classe supprimée.' })) navigate('#');
     }, true),
@@ -246,7 +220,6 @@
     export: exportData,
     'raw-export': () => download(JSON.stringify(store.rawCopies(), null, 2), 'carnet-a-recuperer.json'),
     previous: () => { try { const data = store.previous(); if (!data) notify('Il n’y a pas encore de copie précédente sur cet appareil.'); else previewRestore(data); } catch (error) { notify(error.message); } },
-    original: () => { try { const data = store.original(); if (!data) notify('Aucun carnet antérieur à la mise à jour n’a été trouvé sur cet appareil.'); else previewRestore(data); } catch (error) { notify(error.message); } },
     retry: () => { if (persist()) notify('Toutes vos modifications sont enregistrées.'); },
     reload: () => ask('Rouvrir le carnet enregistré ?', '<p>Les modifications non enregistrées de cette fenêtre seront abandonnées. Téléchargez votre copie si vous souhaitez les conserver.</p>' + V.button('Télécharger ma copie', 'export', 'button secondary'), 'Rouvrir', () => location.reload()),
     print: () => window.print()
@@ -255,7 +228,7 @@
     const btn = event.target.closest('[data-action]'); if (!btn) return;
     const action = btn.dataset.action;
     if (!actions[action]) return;
-    if ((state.recovery || state.conflict) && !['backup', 'export', 'raw-export', 'previous', 'original', 'reload', 'close-dialog', 'retry'].includes(action)) { notify('Retrouvez votre carnet avant de le modifier.'); return; }
+    if ((state.recovery || state.conflict) && !['backup', 'export', 'raw-export', 'previous', 'reload', 'close-dialog', 'retry'].includes(action)) { notify('Retrouvez votre carnet avant de le modifier.'); return; }
     actions[action](route(), btn);
   });
   dialog.addEventListener('submit', event => {
@@ -277,19 +250,6 @@
     if (input.id === 'summary-search') { state.query = input.value; document.getElementById('summary-results').innerHTML = V.summaryCards(r.cls, state.query, state.sort); return; }
     if (input.hasAttribute('data-distribution')) { saveGradedAnswer(input.dataset.distribution, input.value, false, input.dataset.level); return; }
     if (input.hasAttribute('data-answer') || input.hasAttribute('data-bonus')) { saveGradedAnswer(input.dataset.answer, input.value, input.hasAttribute('data-bonus')); return; }
-    if (!input.hasAttribute('data-point')) return;
-    if (state.conflict) { input.value = r.control.results[r.student.id]?.[input.dataset.skill]?.[input.dataset.level] || ''; notify('Rouvrez le carnet enregistré avant de poursuivre la saisie.'); return; }
-    const skillId = input.dataset.skill, level = input.dataset.level, raw = input.value;
-    mutate(data => {
-      const control = editClass(data, r.cls.id).controls.find(c => c.id === r.control.id);
-      M.setResult(control, r.student.id, skillId, level, raw);
-    }, { render: false });
-    const current = route(), spec = current.control.skills.find(s => s.skillId === skillId);
-    const status = M.resultStatus(current.control.results[current.student.id]?.[skillId], spec.max);
-    input.setAttribute('aria-invalid', String(M.parsePoints(raw).kind === 'invalid'));
-    const el = document.getElementById('status-' + skillId); el.textContent = V.statusText(status, spec.max); el.className = 'entry-status ' + status.state;
-    const progress = M.studentProgress(current.control, current.student.id);
-    document.getElementById('student-progress').textContent = `${progress.complete} / ${progress.total} compétences complètes`;
   });
   main.addEventListener('change', async event => {
     const el = event.target, r = route();
@@ -310,11 +270,10 @@
       state.conflict = true; state.error = new S.StorageError('Le carnet a changé dans une autre fenêtre. Rouvrez sa version enregistrée avant de continuer. Vous pouvez d’abord télécharger votre copie.', 'conflict'); updateNotice();
     }
   }
-  window.addEventListener('storage', event => { if ([S.KEY, S.V2, S.V1, ...S.LEGACY, null].includes(event.key)) checkExternal(); });
+  window.addEventListener('storage', event => { if ([S.KEY, null].includes(event.key)) checkExternal(); });
   window.addEventListener('focus', checkExternal);
   try {
     const loaded = store.load(); state.data = loaded.data;
-    if (loaded.migrated && persist()) notify('Votre carnet a été récupéré. Les données d’origine sont conservées ; les éventuels pourcentages de test restent visibles dans les copies pour référence.');
   } catch (error) { state.recovery = true; state.error = error; }
   renderRoute(false);
 })();

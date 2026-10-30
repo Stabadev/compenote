@@ -1,148 +1,157 @@
-# CompéNote — V2
+# CompéNote — Version expérimentale par items
 
-CompéNote accompagne une enseignante dans le suivi des notes et des compétences et la correction des copies, notamment sur téléphone. Le parcours général est : **classes → élèves → devoirs → compétences → bilans**.
+Version de développement et de test. Le calcul des compétences utilise des **nombres d’items**. Les données des versions précédentes ne sont pas reprises et leurs clés de stockage ne sont ni modifiées ni supprimées.
 
 ## Ouvrir l’application
 
-Ouvrir **index.html** dans un navigateur récent. Garder `index.html`, `styles.css` et le dossier `js` ensemble. Aucun paquet à installer, aucune compilation, aucun service externe.
+Ouvrir `index.html` dans un navigateur récent, en conservant `styles.css` et le dossier `js` à côté. Aucun framework, paquet à installer, compilation, compte ou serveur de données.
 
-Pour tester sur ordinateur avec une adresse stable :
+Pour une adresse locale stable, on peut aussi lancer :
 
 ```sh
 python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
-Ouvrir `http://127.0.0.1:8000`. Pour un téléphone sur le même réseau :
+Puis ouvrir `http://127.0.0.1:8000`. Garder le même navigateur et la même adresse : changer de port, d’origine ou d’appareil donne accès à un autre stockage. L’ouverture directe `file:` dépend des règles de stockage du navigateur.
 
-```sh
-python3 -m http.server 8000 --bind 0.0.0.0
+## Créer un devoir
+
+1. Créer une classe et ajouter les élèves dans **Gérer**, un nom par ligne. Les homonymes sont autorisés.
+2. Dans cette classe, ouvrir **Devoirs → Nouveau devoir**.
+3. Renseigner le nom et, éventuellement, la date. Choisir **/5, /10 ou /20**.
+4. Cocher les compétences et attribuer des points à chacune. Une compétence apparaît une seule fois par devoir.
+5. Ajouter éventuellement des questions de cours, avec leur libellé et leurs points, et autoriser les bonus.
+6. Vérifier le compteur : **compétences + questions de cours = maximum du devoir**, exactement. Chaque élément a un barème strictement positif ; au moins une compétence est obligatoire.
+
+Le nombre d’items n’est jamais demandé à la création. Aucun lien n’est imposé entre nombre d’items et barème. Le formulaire de création n’est enregistré qu’à sa validation.
+
+Le barème, les éléments et l’autorisation des bonus sont verrouillés dès la première saisie, même ensuite effacée, tant que le devoir conserve des corrections. Le nom et la date restent modifiables.
+
+## Corriger par items
+
+Pour chaque copie, saisir dans **NA / ECA / PA / TA** le **nombre d’items** relevant de chaque niveau. Tous les items d’une même compétence ont le même poids.
+
+| Niveau | Signification | Coefficient |
+|---|---|---:|
+| NA | Non acquis | 0 |
+| ECA | En cours d’acquisition | 0,5 |
+| PA | Partiellement acquis | 0,75 |
+| TA | Totalement acquis | 1 |
+
+Pour une compétence de barème B :
+
+```text
+N = NA + ECA + PA + TA
+Taux de maîtrise = (0 × NA + 0,5 × ECA + 0,75 × PA + TA) / N
+Points obtenus = B × taux de maîtrise
 ```
 
-Ouvrir `http://ADRESSE_LOCALE_DE_L_ORDINATEUR:8000` sur le téléphone. Le serveur ne reçoit pas les données du carnet : elles restent dans le navigateur. Pour une distribution régulière, préférer une adresse HTTPS fixe.
+Dès que la saisie est valide et **N > 0**, la compétence est entièrement évaluée. N peut être inférieur, égal ou supérieur à B. L’écran affiche automatiquement le total d’items, la maîtrise et les points obtenus.
 
-**Garder le même navigateur et la même adresse d’accès.** Passer de l’ouverture directe à une adresse HTTP, changer de port ou utiliser un autre appareil donne accès à un autre stockage. Télécharger puis restaurer une sauvegarde pour transférer le carnet.
+Exemples :
 
-## Corriger un devoir
+| Barème | Items saisis | Maîtrise | Points obtenus |
+|---|---|---:|---:|
+| /4 | 1 NA et 1 TA | 50 % | 2/4 |
+| /5 | 3 TA | 100 % | 5/5 |
+| /5 | 2 NA | 0 % | 0/5 |
+| /4 | 1 ECA et 1 TA | 75 % | 3/4 |
+| /3 | 1 NA, 1 ECA, 1 PA, 1 TA | 56,25 % | 1,6875/3 avant affichage |
+| /4 | 2 PA et 1 TA | 83,333… % | 3,333…/4 avant affichage |
 
-1. Créer une classe et coller les élèves dans **Gérer**, un par ligne.
-2. Dans **Devoirs**, choisir **Nouveau devoir**.
-3. Donner un nom, choisir **/5, /10 ou /20**, puis les compétences et leurs points.
-4. Ajouter si nécessaire une ou plusieurs questions de cours avec leurs points ; autoriser éventuellement les bonus.
-5. Le compteur indique les points restants ou en trop. **Créer et corriger** n’est disponible que si le barème est exact, avec au moins une compétence et des points strictement positifs pour chaque élément.
-6. Pour chaque copie, répartir les points de chaque compétence dans les quatre champs **NA, ECA, PA, TA**. La somme doit correspondre à son barème. L’acquisition et les points obtenus sont calculés et affichés immédiatement quand la répartition est complète. **Effacer la répartition** remet les quatre champs à vide.
-7. Saisir directement les points des questions de cours et les bonus éventuels. La note s’affiche en bas, avec **Élève suivant**.
-8. Ouvrir **Résultats de la classe** pour consulter ou imprimer les notes et retrouver les copies à terminer. Toucher un nom rouvre sa copie.
-9. Consulter **Compétences** pour les bilans pondérés, puis télécharger une sauvegarde en fin de séance.
+Les nombres d’items doivent être des entiers positifs ou nuls. Décimales, valeurs négatives et texte sont refusés dans le calcul. Une limite technique par champ de `floor(Number.MAX_SAFE_INTEGER / 4)` protège la précision de la somme des quatre compteurs ; elle est indépendante du barème.
 
-La sauvegarde sur l’appareil se fait à chaque modification. **Enregistré** décrit la sauvegarde, pas la complétude de la correction.
+- Quatre champs vides : compétence non renseignée.
+- Quatre zéros explicites : zéro item, compétence encore à renseigner.
+- Une case vide vaut zéro si au moins un item est saisi ailleurs et que toutes les valeurs sont valides.
+- Une valeur incorrecte invalide la compétence, même si une autre colonne contient un item.
+- **Effacer les items** vide les quatre champs.
 
-## Règles des nouveaux devoirs
+Les brouillons, y compris incorrects, restent sauvegardés. Une compétence non renseignée, sans item ou invalide ne compte pas dans le bilan.
 
-- `mode: "graded"` ; note maximale 5, 10 ou 20.
-- Compétences + questions de cours = note maximale exacte. Le contrôle du total utilise des centièmes entiers. Aucune redistribution automatique.
-- Points d’une compétence = NA × 0 + ECA × 0,5 + PA × 0,75 + TA × 1. Acquisition = points obtenus / barème × 100. Seules les quatre valeurs brutes sont enregistrées ; aucun pourcentage n’est saisi.
-- Répartition de compétence : somme inférieure au barème = partielle ; supérieure = excessive ; quatre champs vides = non renseignée ; valeur illisible = invalide. Seule une répartition complète contribue à la note et au bilan. Les champs vides valent zéro lorsque la répartition est complète.
-- Une compétence /4 avec NA = 4 et les autres colonnes à zéro est complète, à 0 point et 0 %. Points de cours entre 0 et le barème de la question.
-- Bonus facultatif, positif ou nul, hors barème ; vide = 0. La note peut dépasser le maximum : **21 / 20** est valide.
-- Les champs obligatoires vides ne valent pas zéro. Un zéro explicite est un résultat valide.
-- Une note finale exige toutes les compétences et questions renseignées correctement. Avant cela, le total est marqué **Provisoire**, ou **À corriger** si une valeur est invalide. La liste des résultats n’affiche aucune note définitive pour ces copies.
-- Saisies avec virgule ou point, deux décimales maximum. La limite technique du parseur reste 100 000, comme en V1 ; aucun plafond pédagogique configurable de bonus.
-- Aucun arrondi des points par élément avant la somme. Les points et notes s’affichent avec au plus deux décimales.
-- Les acquisitions valides alimentent le bilan même si d’autres éléments de la copie sont incomplets. **Les questions de cours et les bonus n’alimentent jamais les compétences.**
-- Dès la première saisie, même ensuite effacée, le barème, les éléments et l’activation des bonus sont verrouillés tant que le devoir conserve des corrections. Le nom et la date restent modifiables.
+## Note finale et résultats
 
-La note finale est la somme des **points pondérés des compétences + points des questions de cours + bonus**.
+Les questions de cours restent saisies directement en points, de zéro à leur maximum. Un champ vide n’est pas un zéro ; un zéro explicite est une réponse complète.
 
-Exemple : compétence A /5 avec NA 1, ECA 1, PA 2, TA 1 = **3 points, 60 %** ; compétence B /8 avec NA 0, ECA 2, PA 4, TA 2 = **6 points, 75 %** ; cours = 5 / 7 ; bonus = 1. **Note : 15 / 20.**
+```text
+Note finale = points des compétences + points des questions de cours + bonus
+```
 
-## Anciens contrôles et bilans
+Le bonus est facultatif, positif ou nul, hors barème. Vide = zéro. La note peut dépasser le maximum, par exemple **21/20**. Les points de cours et bonus acceptent point ou virgule, deux décimales maximum ; la limite technique est 100 000. Aucun plafond pédagogique de bonus n’est configurable.
 
-Les contrôles existants portent `mode: "legacyDistribution"` et l’indication **Ancien format**. Ils restent consultables et modifiables avec leurs quatre cases NA/ECA/PA/TA. Aucune note finale n’est inventée et aucune répartition n’est convertie en pourcentage arrondi.
+La note définitive exige toutes les compétences évaluées et toutes les questions correctement renseignées. Avant cela, le total est **Provisoire** ; une saisie invalide donne **À corriger**. Le provisoire inclut uniquement les éléments complets et le bonus valide.
 
-Les règles historiques restent inchangées :
+Les calculs utilisent les nombres JavaScript sans arrondi intermédiaire des contributions. Les points et notes s’affichent avec au plus deux décimales, la maîtrise avec au plus une décimale. Les valeurs brutes restent enregistrées ; les résultats sont recalculés. Les petites approximations propres aux nombres flottants restent possibles.
 
-- NA × 0 ; ECA × 0,5 ; PA × 0,75 ; TA × 1.
-- La répartition est complète quand la somme correspond au barème.
-- Vide, partiel, invalide ou excessif : exclu du bilan. Une répartition complète tout NA compte à 0 %.
-- Les cases vides valent zéro seulement si la répartition est complète.
-- La complétude s’évalue par élève, compétence et contrôle.
+**Résultats de la classe** permet de consulter les notes, retrouver une copie à terminer et imprimer. Les devoirs sont listés du plus récemment ajouté au plus ancien. Les classes, élèves et devoirs restent modifiables ou supprimables ; les suppressions peuvent être annulées jusqu’à la prochaine modification, dans la fenêtre actuelle.
 
-Le bilan mélange les deux formats : somme des points obtenus pour une compétence / somme de ses barèmes retenus × 100. La pondération reste donc celle des points possibles, sans normalisation des devoirs /5 ou /10 vers /20.
+## Bilan de compétences
 
-Les seuils de couleur restent <25, <50, <75, puis ≥75 %. Les couleurs du bilan sont des tranches de pourcentages calculés ; elles ne désignent pas une colonne unique de la répartition. L’affichage historique « Moins de … % » est conservé lorsqu’un arrondi masquerait un seuil non atteint.
+L’onglet **Compétences** présente un bilan individuel sur tous les devoirs de la classe :
 
-## Architecture et schéma
+```text
+Maîtrise cumulée = somme des points obtenus / somme des barèmes retenus × 100
+```
 
-- `index.html` : accueil et scripts classiques, compatible avec l’ouverture directe.
-- `styles.css` : présentation mobile, bureau et impression.
-- `js/model.js` : validation des schémas 1/2/3, migration, calculs et mutations métier, utilisable sous Node.
-- `js/storage.js` : sauvegarde, lecture multiversion, copie précédente et détection des conflits.
-- `js/views.js` : vues échappées sans mutation du carnet.
-- `js/app.js` : navigation, commandes et mise à jour ciblée de la correction, sans reconstruction des champs à chaque frappe.
+Le poids dépend du **barème**, jamais du nombre d’items. Exemple : 50 % sur 4 points, puis 100 % sur 6 points donnent `(2 + 6) / (4 + 6) = 80 %`, quel que soit le nombre d’items de chaque devoir.
 
-La V2 utilise le **schéma de stockage 3**, distinct du schéma 2 expérimental à pourcentages. Le document conserve `version`, `revision`, `updatedAt`, `classes`. Chaque classe conserve ses élèves, compétences et contrôles à identifiants stables.
+Seules les compétences valides avec au moins un item sont retenues, même si le reste de la copie est encore incomplet. Les questions de cours et les bonus sont exclus du bilan. Les fiches peuvent être recherchées, triées par nom et imprimées.
 
-Un devoir `graded` contient `id`, `mode`, `name`, `date`, `maxGrade`, `items`, `bonusEnabled`, `results`. Chaque élément possède `id`, `type`, `maxPoints` et soit `skillId` (`skill`), soit `label` (`courseQuestion`). Une compétence ne figure qu’une fois dans un devoir.
+Les couleurs correspondent aux tranches `<25`, `<50`, `<75` et `≥75 %`, et non à la sélection d’un niveau unique. Si l’arrondi annoncerait un seuil non atteint, l’affichage indique « Moins de … % ».
 
-Une correction `results[studentId]` contient `answers` et `bonusRaw`. Pour une compétence, `answers[itemId] = { NA, ECA, PA, TA }`, avec les quatre textes bruts, comme dans le modèle historique. Pour une question de cours, `answers[itemId] = { raw }`. Les brouillons invalides restent sauvegardés. Le même moteur `resultStatus` calcule les répartitions des anciens contrôles et des nouveaux devoirs. Acquisition, points obtenus, note finale et complétude ne sont pas stockés en double.
+## Stockage, sauvegarde et récupération
 
-Un contrôle historique conserve exactement ses `skills` et `results`, avec le seul ajout du mode. Le validateur V1 reste disponible pour contrôler les anciennes sauvegardes avant migration.
+- Nouvelle clé : **`compenote_items_experimental_v1`**.
+- Copie précédant la dernière écriture : `compenote_items_experimental_v1_previous`.
+- Format JSON : `version: "compenote-items-experimental-1"`.
+- Aucune lecture automatique, migration, suppression ou réécriture des anciennes clés.
+- Import exclusivement du nouveau format ; les anciens exports sont refusés.
+- Export JSON de tout le carnet, avec noms, résultats et brouillons.
+- Restauration après validation et confirmation : remplacement de tout le carnet, sans fusion. La mémoire n’est remplacée qu’après écriture réussie.
+- Enregistrement local à chaque modification. **Enregistré** décrit la sauvegarde, pas la complétude de la copie.
+- Un échec d’écriture laisse les modifications en mémoire, affiche **Non enregistré**, permet l’export et la nouvelle tentative, et demande au navigateur un avertissement à la fermeture.
+- Une corruption ouvre la récupération ; elle ne déclenche pas de carnet vide silencieux. La copie précédente peut être examinée puis restaurée.
+- Les modifications d’une autre fenêtre sont détectées et bloquent la poursuite de la saisie. Cette protection n’est pas une transaction collaborative atomique.
 
-## Migration, protection et récupération
+Télécharger régulièrement une sauvegarde externe. Le stockage local et sa copie précédente ne protègent pas contre l’effacement des données du navigateur. Aucun partage ni synchronisation entre appareils. Éviter la navigation privée.
 
-Avant la première ouverture de la V2, télécharger une sauvegarde depuis l’application précédente si possible.
+## Structure et responsabilités
 
-- Clé courante : `mon_carnet_v3` ; copie précédant la dernière écriture : `mon_carnet_v3_previous`. Le nom V2 reste celui de la fonctionnalité métier ; 3 désigne le schéma de stockage actuel.
-- Sans schéma 3 existant, lecture prioritaire de `mon_carnet_v2` (expérimental), puis de `mon_carnet_v1`, puis du prototype. Validation du format source, migration en mémoire, validation du schéma 3, puis écriture dans la **nouvelle clé**. La valeur écrite est relue et comparée avant d’annoncer la réussite.
-- `mon_carnet_v2`, `mon_carnet_v2_previous`, `mon_carnet_v1` et `mon_carnet_v1_previous` ne sont jamais écrasées ou supprimées par l’application. Classes, identifiants, résultats et brouillons V1 sont conservés ; seule la version du document et le mode des contrôles changent.
-- **Examiner le carnet d’origine** permet aussi de restaurer explicitement la source expérimentale, V1 ou prototype, même si la première copie au nouveau format est devenue illisible. Cette source ne contient pas les corrections ultérieures.
-- Un carnet au schéma 3 présent est prioritaire. Une corruption ouvre la récupération, jamais un carnet vide ou un retour silencieux à V1.
-- **Copie précédente** propose la copie au schéma 3 ; à défaut, la copie précédente expérimentale puis V1 peut être examinée et restaurée après migration. Une copie présente mais corrompue n’est jamais masquée par une copie plus ancienne.
-- L’import accepte les sauvegardes aux schémas 3, 2 expérimental, 1 et prototype. Il vérifie leur contenu puis demande confirmation du remplacement de tout le carnet. Aucune fusion automatique. La mémoire courante n’est remplacée qu’après écriture réussie.
-- Un échec d’écriture est affiché ; les modifications restent exportables et un avertissement de fermeture est demandé au navigateur.
-- Une modification externe de la V2 bloque la poursuite des modifications. Pendant la session de migration, une modification de la source historique est également détectée. Le contrôle avant écriture limite les conflits, sans constituer une transaction collaborative atomique.
-- Utiliser ensuite uniquement la V2 : les anciennes applications continueraient à écrire dans leurs propres clés, sans synchronisation avec la V2.
-- Les suppressions, restaurations et modifications d’un contrôle peuvent être annulées **jusqu’à la prochaine modification**, dans la fenêtre actuelle. Aucune corbeille permanente.
-- Les sauvegardes JSON contiennent aussi les brouillons et les données historiques. Les noms et résultats des élèves sont inclus : choisir un emplacement approprié.
-- La copie locale précédente et les anciennes clés ne protègent pas contre l’effacement des données du navigateur. Télécharger régulièrement une sauvegarde externe ; éviter la navigation privée.
+- `index.html` : structure, scripts et mention expérimentale.
+- `styles.css` : mobile, bureau, impression.
+- `js/model.js` : moteur unique, validation, élèves, verrouillage.
+- `js/storage.js` : stockage isolé, conflits, copie précédente et import.
+- `js/views.js` : formulaires, correction, résultats, bilans et formatage.
+- `js/app.js` : navigation, événements, commandes et sauvegarde.
 
-## Données expérimentales à pourcentages
+Le document contient `version`, `revision`, `updatedAt`, `classes`. Chaque classe conserve `students`, `skills`, `controls`. Un devoir conserve `id`, `name`, `date`, `maxGrade`, `items`, `bonusEnabled`, `results` ; aucun mode de notation alternatif.
 
-Un pourcentage seul ne permet pas de retrouver les quatre colonnes de la copie. La migration du schéma 2 n’invente donc aucune répartition.
+Un élément de barème contient `id`, `type`, `maxPoints` et soit `skillId` (`skill`), soit `label` (`courseQuestion`). Une correction `results[studentId]` contient `answers` et `bonusRaw`. `answers[itemId]` contient les textes `{ NA, ECA, PA, TA }` pour les compteurs d’items ou `{ raw }` pour les points de cours. Notes et pourcentages ne sont pas stockés en double.
 
-Pour chaque réponse de compétence expérimentale, le texte d’origine (même vide ou invalide) est conservé dans `results[studentId].experimentalPercentages[itemId]`. La répartition reste non renseignée. Les cours, bonus, barèmes, identifiants et contrôles historiques restent inchangés. La clé source complète reste également intacte.
+Les fonctions de calcul principales sont `parseItems()`, `resultStatus()`, `answerStatus()`, `gradeStatus()`, `rubricStatus()` et `aggregate()`. Les anciens modes, migrations et références aux pourcentages expérimentaux ont été retirés.
 
-Un message dans la liste des devoirs signale les copies à reprendre. Dans chaque compétence concernée, l’ancienne valeur est visible comme référence, explicitement sans effet sur les calculs. **Il faut ressaisir la répartition depuis la copie** pour retrouver une note finale et une contribution au bilan. Cela concerne uniquement les essais de la première V2, pas les résultats historiques à quatre colonnes.
-
-Ces références restent conservées après ressaisie, dans les sauvegardes et à la restauration. Les validateurs distinguent les formats : une réponse `{ raw: "50" }` ne peut pas être interprétée comme une répartition dans le schéma 3.
-
-## Compatibilité avec le prototype
-
-Sans carnet aux schémas 3, 2 ou 1, les clés `carnet_competences_math_v5` et `gestion_competences_points_v4` sont reprises dans **Ma classe**. Les résultats sont conservés et les identifiants du prototype sont remappés ; ceux des schémas 1 et 2 restent inchangés. Les clés sources ne sont jamais effacées.
-
-En ouverture directe `file:`, le navigateur peut isoler le stockage par fichier. Conserver le prototype et exporter ses données avant de changer de fichier ou d’adresse. Les fichiers du prototype et les outils de démonstration locaux non suivis par Git ne font pas partie de la version distribuée.
-
-## Vérifications
-
-Aucune dépendance npm à installer :
+## Tests
 
 ```sh
-node tests/model.test.js
-node tests/grading.test.js
+node --test tests/model.test.js tests/grading.test.js
 node tests/browser.test.cjs
 git diff --check
 ```
 
-Les tests métier couvrent les formules historiques et V2, les trois maxima, les quatre cas de répartition demandés, les états vides/partiels/excessifs/invalides, les bonus, les décimales, le verrouillage, les bilans mixtes, la migration sans perte et les protections de stockage.
+Les tests métier couvrent les trois maxima, les totaux de barème, N inférieur/égal/supérieur au barème, les exemples de référence, vide/zéros/invalides, précision, cours, bonus, bilan pondéré, verrouillage, classes indépendantes, validation, persistance, import/export, corruption, conflits et quota.
 
-Le test navigateur utilise Chrome à `/usr/bin/google-chrome`, ou `CHROME_BIN`. Il lance un profil temporaire isolé sans toucher au profil personnel. Les captures sont écrites dans le dossier temporaire du système. Chrome est lancé sans bac à sable pour cet environnement de test isolé ; ne pas utiliser ce mode pour la navigation courante.
+Le test navigateur utilise Chrome à `/usr/bin/google-chrome`, ou le binaire Chromium compatible indiqué dans `CHROME_BIN` :
 
-Les parcours vérifient création et correction V2, résultats et reprise d’une copie, ancien format, migration V1, prototype et pourcentages expérimentaux, import/export, quota, conflits, rechargement, focus et largeurs 360/390/430/1 280 px. Ils vérifient aussi les cibles tactiles à hauteur réduite (approximation du clavier ouvert), les identifiants HTML de la correction, les erreurs console et la génération PDF des résultats. Le scénario de charge utilise 35 élèves × 50 contrôles historiques et un carnet V2 multi-classes.
+```sh
+CHROME_BIN=/chemin/vers/navigateur node tests/browser.test.cjs
+```
 
-## Limites et vérifications manuelles
+Il utilise un profil temporaire isolé et écrit ses téléchargements et captures dans le répertoire temporaire système. Il vérifie création, correction, résultats, PDF, import/export, erreurs, sauvegarde, recherche, tri, annulation, charge multi-classes, focus, champs accessibles et largeurs 360/390/430/1280 px. Le lancement sans bac à sable est limité à ce profil automatisé de test.
 
-- Aucun compte, serveur de données, partage ou synchronisation entre appareils.
-- Aucun statut absent/dispensé, archivage, participant spécifique par devoir ou statistique avancée.
-- Référentiel de compétences inchangé ; pas de nouvel écran de personnalisation.
-- Le barème de création n’est enregistré qu’à la création du devoir ; les corrections, elles, sont sauvegardées à chaque modification.
-- Tester sur de vrais appareils Android et iPhone : clavier décimal, navigation avec clavier ouvert, téléchargements, restauration et impression. L’émulation Chrome ne remplace pas cet essai.
+## Limites de cette version
+
+Cette version reste expérimentale. Les tests sous navigateur Chromium ne remplacent pas les essais sur de vrais appareils Android et iPhone : clavier numérique, navigation, téléchargement, restauration et impression.
+
+Le référentiel initial reste fixe dans l’interface. Aucun statut absent/dispensé, participant propre à un devoir, archivage ou moyenne générale des notes. Les participants suivent la liste actuelle de la classe.
+
+Chaque saisie clone, valide et sauvegarde le carnet entier : le coût augmente avec son volume. La copie précédente correspond à la dernière écriture, pas à une séance complète.
